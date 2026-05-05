@@ -13,11 +13,14 @@ Thanks for considering a contribution. This project is in skeleton phase, so the
 ```bash
 git clone https://github.com/dkd-dobberkau/t3-static-html-importer.git
 cd t3-static-html-importer
-composer install --no-plugins --no-scripts
-vendor/bin/phpunit
+composer install --no-scripts
+vendor/bin/phpunit                         # unit suite
+vendor/bin/phpunit -c Build/FunctionalTests.xml   # functional suite (sqlite)
 ```
 
-`--no-plugins --no-scripts` keeps composer from running TYPO3's `asset:publish`, which only succeeds inside a full TYPO3 site. The autoloader still works, so unit tests run fine.
+`--no-scripts` skips composer.json scripts. The `typo3/cms-composer-installers` plugin still runs and lays out a minimal `public/` tree; that layout is required by `typo3/testing-framework` for functional tests.
+
+The functional suite needs `pdo_sqlite` (PHP extension) and writes a transient instance under `var/tests/`. Both directories are gitignored.
 
 PHP `^8.2` and the dependencies in [`composer.json`](composer.json) are required.
 
@@ -29,6 +32,7 @@ PHP `^8.2` and the dependencies in [`composer.json`](composer.json) are required
 - All AI calls go through `AiClassifierInterface` so tests can swap in `AiClassifierMock`. Tests do not hit the network.
 - No em dashes in doc comments or report output. Plain text or markdown only.
 - Tests live under `Tests/Unit/...` and use the `\T3x\StaticHtmlImporter\Tests\Unit\...` namespace.
+- Functional tests live under `Tests/Functional/...` and use `\T3x\StaticHtmlImporter\Tests\Functional\...`. They run a real (sqlite) TYPO3 instance via `typo3/testing-framework`.
 
 ## Pull requests
 

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Functional test suite under `Tests/Functional/` driven by
+  `typo3/testing-framework` ^9.5 against sqlite. First case
+  (`DataHandlerAdapterTest`) exercises insert / find-by-block-id /
+  re-run-updates against a real TYPO3 instance, replacing the
+  unit-test fakes for the production wrapper. New phpunit config in
+  `Build/FunctionalTests.xml`. CI now runs both unit and functional
+  suites on PHP 8.2/8.3/8.4. Closes #22.
+
+### Changed
+
+- `composer install` no longer needs `--no-plugins`. The
+  `typo3/cms-composer-installers` plugin runs cleanly with
+  `--no-scripts` and lays out the minimal `public/` tree required by
+  the functional suite. CONTRIBUTING.md updated.
+
 ## [0.2.0] - 2026-05-05
 
 ### Added

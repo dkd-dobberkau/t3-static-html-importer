@@ -43,17 +43,28 @@ jobs:
           key: ${{ runner.os }}-composer-${{ matrix.php }}-${{ hashFiles('**/composer.json') }}
           restore-keys: ${{ runner.os }}-composer-${{ matrix.php }}-
 
+      - name: Setup PHP extensions for functional tests
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, mbstring, xml, sqlite3, pdo_sqlite
+          coverage: none
+          tools: composer:v2
+
       - name: Install dependencies
-        # --no-plugins disables TYPO3's asset:publish post-install hook, which
-        # needs a full TYPO3 site. The autoloader (PSR-4 from composer.json)
-        # works without the plugin, so unit tests run fine.
-        run: composer install --no-progress --no-plugins --no-scripts --no-interaction --prefer-dist
+        # --no-scripts skips composer.json scripts. The typo3/cms-composer-installers
+        # plugin still runs and lays out a minimal public/ tree; that layout is
+        # required by typo3/testing-framework for functional tests.
+        run: composer install --no-progress --no-scripts --no-interaction --prefer-dist
 
       - name: Lint PHP files
         run: find Classes Tests -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /dev/null
 
-      - name: Run PHPUnit
+      - name: Run PHPUnit (unit)
         run: vendor/bin/phpunit
+
+      - name: Run PHPUnit (functional)
+        run: vendor/bin/phpunit -c Build/FunctionalTests.xml
 
       - name: Audit composer dependencies
         run: composer audit --abandoned=ignore
