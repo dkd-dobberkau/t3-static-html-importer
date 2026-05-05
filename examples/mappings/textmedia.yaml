@@ -1,0 +1,14 @@
+# Mapping for default textmedia blocks (cards, articles).
+cType: textmedia
+
+# Multi-selector hint covers cards and articles at the same time.
+selector: 'article.card, article'
+
+fields:
+  header:
+    description: 'The block heading (h1, h2 or h3).'
+    type: string
+
+  bodytext:
+    description: 'The body text as HTML, preserving links and emphasis.'
+    type: html

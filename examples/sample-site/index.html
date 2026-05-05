@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Acme &mdash; Home</title>
+</head>
+<body>
+
+<header role="banner">
+    <h1>Acme Industries</h1>
+    <nav role="navigation">
+        <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/about.html">About</a></li>
+            <li><a href="/services/web.html">Services</a></li>
+        </ul>
+    </nav>
+</header>
+
+<main>
+    <section data-component="hero">
+        <h2>Bring static HTML into TYPO3 the boring way</h2>
+        <p>The Static HTML Importer reads structured HTML and turns it into
+            tt_content records, FAL assets and Fluid partials. No custom
+            scripts, no manual copy-paste.</p>
+        <img src="/uploads/hero.svg" alt="Hero illustration">
+    </section>
+
+    <section class="cards" aria-label="Highlights">
+        <article class="card card--featured">
+            <h3>Three source adapters</h3>
+            <p>Local directories, HTTP crawls or pattern libraries.</p>
+        </article>
+        <article class="card">
+            <h3>Idempotent re-runs</h3>
+            <p>Re-running an import updates records by block hash instead of
+                duplicating them.</p>
+        </article>
+        <article class="card">
+            <h3>AI as a fallback</h3>
+            <p>Deterministic heuristics first; the LLM only kicks in below
+                the configured confidence threshold.</p>
+        </article>
+    </section>
+</main>
+
+<footer role="contentinfo">
+    <p>&copy; 2026 Acme Industries</p>
+</footer>
+
+</body>
+</html>

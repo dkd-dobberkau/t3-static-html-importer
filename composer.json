@@ -42,6 +42,7 @@
     "scripts": {
         "test": "phpunit --testdox"
     },
+    "bin": ["bin/t3shi"],
     "config": {
         "allow-plugins": {
             "typo3/cms-composer-installers": true,

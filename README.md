@@ -22,6 +22,21 @@ Activate the extension afterwards:
 vendor/bin/typo3 extension:setup static_html_importer
 ```
 
+## Try it without TYPO3
+
+`bin/t3shi` is a standalone runner that wires `analyze` and `templates` against the example fixtures. No TYPO3 boot needed.
+
+```bash
+git clone https://github.com/dkd-dobberkau/t3-static-html-importer.git
+cd t3-static-html-importer
+composer install --no-plugins --no-scripts
+vendor/bin/phpunit                                         # 113 tests, all green
+bin/t3shi analyze examples/sample-site --no-ai
+bin/t3shi analyze "pattern-library:examples/sample-patterns" --no-ai
+```
+
+See [`examples/README.md`](examples/README.md) for full copy-paste recipes covering all three source modes (local, HTTP crawl, pattern library) and the mapping YAML format.
+
 ## CLI commands
 
 Three Symfony Console commands, run in order:

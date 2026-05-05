@@ -1,0 +1,63 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/*
+ * t3shi - standalone runner for the Static HTML Importer's analyze and
+ * templates commands. Useful for trying the tool without booting TYPO3.
+ *
+ * The import command is intentionally not exposed here: it needs DataHandler
+ * and FAL, which only resolve inside a TYPO3 site. Inside a real site, use
+ * `vendor/bin/typo3 t3:static-html:import ...` instead.
+ *
+ * AI classification falls back to AiClassifierMock so no API credentials are
+ * needed; pass `--no-ai` for a pure deterministic run.
+ */
+
+(function (): void {
+    foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $candidate) {
+        if (is_file($candidate)) {
+            require $candidate;
+            return;
+        }
+    }
+    fwrite(STDERR, "Could not locate vendor/autoload.php. Run `composer install` first.\n");
+    exit(1);
+})();
+
+use Symfony\Component\Console\Application;
+use T3x\StaticHtmlImporter\Command\AnalyzeCommand;
+use T3x\StaticHtmlImporter\Command\TemplatesCommand;
+use T3x\StaticHtmlImporter\Service\Ai\AiClassifierMock;
+use T3x\StaticHtmlImporter\Service\Analyzer\BlockHasher;
+use T3x\StaticHtmlImporter\Service\Analyzer\StructuralAnalyzer;
+use T3x\StaticHtmlImporter\Service\Mapping\YamlMappingLoader;
+use T3x\StaticHtmlImporter\Service\Source\CrawlAdapter;
+use T3x\StaticHtmlImporter\Service\Source\LocalFilesAdapter;
+use T3x\StaticHtmlImporter\Service\Source\PatternLibraryAdapter;
+use T3x\StaticHtmlImporter\Service\Source\SourceAdapterRegistry;
+use T3x\StaticHtmlImporter\Service\Template\FluidPartialGenerator;
+
+$registry = new SourceAdapterRegistry(
+    new LocalFilesAdapter(),
+    new CrawlAdapter(),
+    new PatternLibraryAdapter(),
+);
+$ai = new AiClassifierMock();
+$analyzer = new StructuralAnalyzer(new BlockHasher());
+$mappings = new YamlMappingLoader();
+
+$application = new Application('t3shi - Static HTML Importer (standalone)', '0.2.0');
+
+$analyze = new AnalyzeCommand($registry, $analyzer, $ai, $mappings);
+$analyze->setName('analyze');
+$analyze->setDescription('Analyze static HTML sources and emit a markdown report (uses AiClassifierMock).');
+$application->add($analyze);
+
+$templates = new TemplatesCommand($registry, $analyzer, $ai, new FluidPartialGenerator());
+$templates->setName('templates');
+$templates->setDescription('Generate Fluid partials from analyzed sources (uses AiClassifierMock).');
+$application->add($templates);
+
+$application->run();
