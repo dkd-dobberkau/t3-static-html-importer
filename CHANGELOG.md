@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `FalImporter` is now functional. Hashes the source file's contents
+  and short-circuits to the existing sys_file uid when SHA1 already
+  matches (no copy, no re-upload). Otherwise routes through the
+  `FalAdapter` (a thin TYPO3 wrapper) to add the file to the
+  configured storage and folder. Target syntax accepts FAL
+  identifiers `1:/path/to` or bare paths that fall back to a
+  configurable default storage uid. When the `enrichMetadata` flag
+  is set, populates `sys_file_metadata` via
+  `AiClassifier::enrichAssetMetadata`; failures are best-effort and
+  do not abort the import. A `sourceBaseDir` constructor argument
+  constrains source paths against `<img src="/etc/passwd">`-style
+  abuse. 9 unit tests via a recording fake adapter.
 - `ContentImporter` is now functional. Builds a tt_content payload
   by routing each `FieldDefinition` through `FieldTransformer`,
   then writes via `DataHandlerAdapter` (a thin abstraction over

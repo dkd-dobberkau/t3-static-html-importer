@@ -33,3 +33,6 @@ services:
 
   T3x\StaticHtmlImporter\Service\Import\FalImporterInterface:
     alias: T3x\StaticHtmlImporter\Service\Import\FalImporter
+
+  T3x\StaticHtmlImporter\Service\Import\FalAdapterInterface:
+    alias: T3x\StaticHtmlImporter\Service\Import\FalAdapter
