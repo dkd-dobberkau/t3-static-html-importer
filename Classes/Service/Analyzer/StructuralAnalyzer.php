@@ -7,6 +7,7 @@ namespace T3x\StaticHtmlImporter\Service\Analyzer;
 use DOMElement;
 use DOMNode;
 use DOMXPath;
+use SplObjectStorage;
 use Symfony\Component\DomCrawler\Crawler;
 use T3x\StaticHtmlImporter\Domain\Model\ContentBlock;
 use T3x\StaticHtmlImporter\Domain\Model\SourceDocument;
@@ -82,37 +83,42 @@ final class StructuralAnalyzer
     }
 
     /**
-     * @param list<DOMElement> $matches
+     * Single-pass O(n * depth) leaf filter: each match walks up its ancestor
+     * chain once and marks any encountered match as "container". Anything not
+     * marked is a leaf.
+     *
+     * @param  list<DOMElement> $matches
      * @return list<DOMElement>
      */
     private function keepLeafMatches(array $matches): array
     {
+        if ($matches === []) {
+            return [];
+        }
+
+        $set = new SplObjectStorage();
+        $hasDescendantMatch = new SplObjectStorage();
+        foreach ($matches as $node) {
+            $set->attach($node);
+        }
+
+        foreach ($matches as $node) {
+            $parent = $node->parentNode;
+            while ($parent !== null) {
+                if ($set->contains($parent)) {
+                    $hasDescendantMatch->attach($parent);
+                }
+                $parent = $parent->parentNode;
+            }
+        }
+
         $leaves = [];
         foreach ($matches as $node) {
-            $hasInner = false;
-            foreach ($matches as $other) {
-                if ($other !== $node && $this->isAncestor($node, $other)) {
-                    $hasInner = true;
-                    break;
-                }
-            }
-            if (!$hasInner) {
+            if (!$hasDescendantMatch->contains($node)) {
                 $leaves[] = $node;
             }
         }
         return $leaves;
-    }
-
-    private function isAncestor(DOMNode $maybeAncestor, DOMNode $node): bool
-    {
-        $parent = $node->parentNode;
-        while ($parent !== null) {
-            if ($parent === $maybeAncestor) {
-                return true;
-            }
-            $parent = $parent->parentNode;
-        }
-        return false;
     }
 
     private function buildBlock(DOMElement $node): ContentBlock

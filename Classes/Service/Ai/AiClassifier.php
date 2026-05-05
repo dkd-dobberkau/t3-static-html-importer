@@ -33,11 +33,20 @@ final class AiClassifier implements AiClassifierInterface
     private const VISION_TEMPERATURE = 0.3;
     private const VISION_MAX_TOKENS = 200;
 
+    public const DEFAULT_MAX_IMAGE_SIZE = 20 * 1024 * 1024;
+
+    /**
+     * @param string|null $imageBaseDir absolute directory under which `enrichAssetMetadata`
+     *                                  is permitted to read images from. Required for the
+     *                                  vision path; null means vision is disabled.
+     */
     public function __construct(
         private readonly Ai $aim,
         private readonly PromptLibrary $prompts,
         private readonly ResultCache $cache,
         private readonly JsonResponseExtractor $jsonExtractor,
+        private readonly ?string $imageBaseDir = null,
+        private readonly int $maxImageSize = self::DEFAULT_MAX_IMAGE_SIZE,
     ) {
     }
 
@@ -101,17 +110,21 @@ final class AiClassifier implements AiClassifierInterface
      */
     private function dispatchVision(array $prompt, string $imagePath): array
     {
-        if (!is_file($imagePath) || !is_readable($imagePath)) {
-            throw new RuntimeException(sprintf('Image is not readable: %s', $imagePath));
+        $resolved = $this->resolveImagePath($imagePath);
+
+        $size = filesize($resolved);
+        if ($size === false || $size > $this->maxImageSize) {
+            throw new RuntimeException(sprintf('Image rejected (size %s, cap %d): %s', var_export($size, true), $this->maxImageSize, $resolved));
         }
-        $imageData = file_get_contents($imagePath);
+
+        $imageData = file_get_contents($resolved);
         if ($imageData === false) {
-            throw new RuntimeException(sprintf('Cannot read image: %s', $imagePath));
+            throw new RuntimeException(sprintf('Cannot read image: %s', $resolved));
         }
 
         $response = $this->aim->vision(
             imageData: $imageData,
-            mimeType: $this->detectMimeType($imagePath),
+            mimeType: $this->detectMimeType($resolved),
             prompt: $prompt['user'],
             systemPrompt: $prompt['system'],
             maxTokens: self::VISION_MAX_TOKENS,
@@ -119,6 +132,41 @@ final class AiClassifier implements AiClassifierInterface
             extensionKey: self::EXTENSION_KEY,
         );
         return $this->parse($response, $prompt['schema']);
+    }
+
+    /**
+     * Constrains image reads to a configured base directory so attacker-influenced
+     * paths cannot exfiltrate /etc/passwd or SSH keys to the LLM provider.
+     */
+    private function resolveImagePath(string $imagePath): string
+    {
+        if ($this->imageBaseDir === null) {
+            throw new RuntimeException(
+                'AiClassifier::enrichAssetMetadata requires imageBaseDir to be configured. '
+                . 'Inject a base directory at construction time to enable vision.',
+            );
+        }
+
+        $base = realpath($this->imageBaseDir);
+        if ($base === false || !is_dir($base)) {
+            throw new RuntimeException(sprintf('imageBaseDir does not exist: %s', $this->imageBaseDir));
+        }
+
+        $real = realpath($imagePath);
+        if ($real === false || !is_file($real)) {
+            throw new RuntimeException(sprintf('Image is not readable: %s', $imagePath));
+        }
+
+        $baseSep = rtrim($base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        if (!str_starts_with($real, $baseSep)) {
+            throw new RuntimeException(sprintf(
+                'Image %s is outside imageBaseDir %s',
+                $real,
+                $base,
+            ));
+        }
+
+        return $real;
     }
 
     /**

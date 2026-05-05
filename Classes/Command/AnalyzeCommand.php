@@ -49,8 +49,9 @@ final class AnalyzeCommand extends Command
             ->addArgument('mapping', InputArgument::OPTIONAL, 'Optional path to a mapping YAML file or directory of mappings')
             ->addOption('no-ai', null, InputOption::VALUE_NONE, 'Skip the AI classifier; rely on deterministic heuristics only')
             ->addOption('threshold', null, InputOption::VALUE_REQUIRED, 'Confidence threshold below which the AI is consulted (0.0-1.0)', (string)self::DEFAULT_THRESHOLD)
-            ->addOption('output', 'o', InputOption::VALUE_REQUIRED, 'Write the markdown report to this file instead of stdout')
-            ->addOption('review', null, InputOption::VALUE_REQUIRED, 'Write a review report (low-confidence blocks) to this file');
+            ->addOption('output', 'o', InputOption::VALUE_REQUIRED, 'Write the markdown report to this absolute file path (parent dir must exist)')
+            ->addOption('review', null, InputOption::VALUE_REQUIRED, 'Write a review report (low-confidence blocks) to this absolute file path')
+            ->addOption('force', null, InputOption::VALUE_NONE, 'Overwrite existing report/review files instead of failing');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -82,11 +83,18 @@ final class AnalyzeCommand extends Command
             return Command::FAILURE;
         }
 
+        $force = (bool)$input->getOption('force');
+
         $report = $this->renderReport($source, $analyses, $loadedMappings, $useAi, $threshold);
         $reportPath = $input->getOption('output');
         if (is_string($reportPath) && $reportPath !== '') {
-            $this->writeFile($reportPath, $report);
-            $output->writeln(sprintf('<info>Report written to %s</info>', $reportPath));
+            try {
+                $resolved = $this->writeFile($reportPath, $report, $force);
+            } catch (Throwable $e) {
+                $output->writeln(sprintf('<error>%s</error>', $e->getMessage()));
+                return Command::FAILURE;
+            }
+            $output->writeln(sprintf('<info>Report written to %s</info>', $resolved));
         } else {
             $output->write($report);
         }
@@ -94,8 +102,13 @@ final class AnalyzeCommand extends Command
         $reviewPath = $input->getOption('review');
         if (is_string($reviewPath) && $reviewPath !== '') {
             $review = $this->renderReview($analyses, $threshold);
-            $this->writeFile($reviewPath, $review);
-            $output->writeln(sprintf('<info>Review report written to %s</info>', $reviewPath));
+            try {
+                $resolved = $this->writeFile($reviewPath, $review, $force);
+            } catch (Throwable $e) {
+                $output->writeln(sprintf('<error>%s</error>', $e->getMessage()));
+                return Command::FAILURE;
+            }
+            $output->writeln(sprintf('<info>Review report written to %s</info>', $resolved));
         }
 
         return Command::SUCCESS;
@@ -181,17 +194,17 @@ final class AnalyzeCommand extends Command
             "- **%s** [%s] -> `%s` (heuristic %.2f)\n",
             $block->tag,
             $this->summariseAttributes($block->attributes),
-            $block->candidateTypes[0] ?? 'unknown',
+            $this->escapeInline($block->candidateTypes[0] ?? 'unknown'),
             $block->confidence,
         );
         $line .= sprintf("  - id: `%s`\n", substr($block->id, 0, 12));
-        $line .= sprintf("  - candidates: %s\n", implode(', ', $block->candidateTypes) ?: '(none)');
+        $line .= sprintf("  - candidates: %s\n", $this->escapeInline(implode(', ', $block->candidateTypes)) ?: '(none)');
         if ($analyzed->classification !== null) {
             $line .= sprintf(
                 "  - ai: type=`%s`, conf=%.2f, rationale=\"%s\"\n",
-                $analyzed->classification->type,
+                $this->escapeInline($analyzed->classification->type),
                 $analyzed->classification->confidence,
-                $analyzed->classification->rationale,
+                $this->escapeInline($analyzed->classification->rationale),
             );
         } else {
             $line .= "  - ai: not consulted\n";
@@ -305,9 +318,9 @@ final class AnalyzeCommand extends Command
         foreach ($rows as $row) {
             $out .= sprintf(
                 "| %s | `%s` | %s | %.2f | %s |\n",
-                $row['document'],
+                $this->escapeInline($row['document']),
                 $row['id'],
-                $row['type'],
+                $this->escapeInline($row['type']),
                 $row['confidence'],
                 $row['source'],
             );
@@ -315,14 +328,55 @@ final class AnalyzeCommand extends Command
         return $out;
     }
 
-    private function writeFile(string $path, string $contents): void
+    /**
+     * Escape markdown-significant characters in a one-line context: pipe (table
+     * separator), backtick (inline code), and collapse newlines so a multi-line
+     * LLM rationale cannot break the surrounding structure.
+     */
+    private function escapeInline(string $value): string
     {
+        return str_replace(
+            ['|', '`', "\r\n", "\n", "\r"],
+            ['\\|', "'", ' ', ' ', ' '],
+            $value,
+        );
+    }
+
+    /**
+     * Validates an output path and writes the contents.
+     *
+     * Path must be absolute, must not contain `..` segments or null bytes, the
+     * parent directory must already exist (no recursive mkdir), and existing
+     * files are only overwritten when `$force` is true.
+     *
+     * Returns the resolved (realpath'd) absolute path that was written.
+     */
+    private function writeFile(string $path, string $contents, bool $force): string
+    {
+        if (trim($path) === '' || str_contains($path, "\0")) {
+            throw new \RuntimeException('Output path must not be empty or contain null bytes');
+        }
+        if (!str_starts_with($path, '/') && preg_match('/^[A-Za-z]:[\\\\\/]/', $path) !== 1) {
+            throw new \RuntimeException(sprintf('Output path must be absolute: %s', $path));
+        }
+        $segments = explode('/', str_replace('\\', '/', $path));
+        if (in_array('..', $segments, true)) {
+            throw new \RuntimeException(sprintf('Output path must not contain ".." segments: %s', $path));
+        }
+
         $dir = dirname($path);
-        if (!is_dir($dir) && !mkdir($dir, 0o755, true) && !is_dir($dir)) {
-            throw new \RuntimeException(sprintf('Cannot create output directory: %s', $dir));
+        $realDir = realpath($dir);
+        if ($realDir === false || !is_dir($realDir)) {
+            throw new \RuntimeException(sprintf('Parent directory must exist: %s', $dir));
         }
-        if (file_put_contents($path, $contents) === false) {
-            throw new \RuntimeException(sprintf('Cannot write file: %s', $path));
+
+        $resolved = $realDir . DIRECTORY_SEPARATOR . basename($path);
+        if (!$force && file_exists($resolved)) {
+            throw new \RuntimeException(sprintf('Refusing to overwrite existing file: %s (use --force)', $resolved));
         }
+        if (file_put_contents($resolved, $contents) === false) {
+            throw new \RuntimeException(sprintf('Cannot write file: %s', $resolved));
+        }
+        return $resolved;
     }
 }

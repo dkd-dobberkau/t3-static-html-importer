@@ -85,6 +85,35 @@ final class LocalFilesAdapterTest extends TestCase
         $this->collect($this->root . '/a.html');
     }
 
+    public function testSkipsSymlinksEvenWhenTheTargetExists(): void
+    {
+        $this->writeFile('real.html', '<p>real</p>');
+        $secret = sys_get_temp_dir() . '/t3shi-tests-secret-' . uniqid('', true) . '.html';
+        file_put_contents($secret, '<p>secret</p>');
+        symlink($secret, $this->root . '/escape.html');
+
+        try {
+            $docs = $this->collect();
+            $paths = array_map(static fn (SourceDocument $d): string => $d->path, $docs);
+
+            self::assertSame(['real.html'], $paths, 'symlinks must not be followed, even if their target exists');
+        } finally {
+            @unlink($secret);
+        }
+    }
+
+    public function testSkipsFilesAboveSizeCap(): void
+    {
+        $this->writeFile('small.html', '<p>ok</p>');
+        $this->writeFile('big.html', str_repeat('x', 2048));
+
+        $adapter = new LocalFilesAdapter(maxFileSize: 1024);
+        $docs = iterator_to_array($adapter->read($this->root), false);
+        $paths = array_map(static fn (SourceDocument $d): string => $d->path, $docs);
+
+        self::assertSame(['small.html'], $paths);
+    }
+
     private function writeFile(string $relative, string $content): void
     {
         $path = $this->root . '/' . $relative;

@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- `AnalyzeCommand --output`/`--review`: paths must be absolute, must
+  not contain `..`, and the parent directory must already exist.
+  Existing files require `--force` to overwrite. Fixes the arbitrary
+  file-write primitive a malicious HTML producer could chain with the
+  source-read path.
+- `LocalFilesAdapter` now skips symlinks and double-checks
+  `realpath()` containment, so a `.html` symlink pointing at
+  `/etc/passwd` is no longer read and shipped into the LLM prompt.
+  File size is capped (10 MB default, configurable per instance).
+- `ResultCache` rejects empty / null-byte / `..` cacheDir input,
+  resolves relative paths against the working dir, creates parent
+  dirs `0700` and writes files `0600`. The cache may contain LLM
+  output echoing back input HTML, so it is no longer
+  group-readable by default.
+- `StructuralAnalyzer::keepLeafMatches()` is now a single-pass
+  O(n*depth) ancestor scan instead of O(n^2) nested isAncestor.
+  `BlockHasher` caps recursion depth (32) and per-node child count
+  (500) so pathological inputs cannot exhaust memory.
+- `AiClassifier::enrichAssetMetadata` requires an explicit
+  `imageBaseDir` at construction time and refuses any path outside
+  it. Image size is capped (20 MB default). Closes the
+  arbitrary-file-read-to-LLM-provider primitive.
+- `AnalyzeCommand` markdown report: pipe `|`, backtick `` ` ``, and
+  embedded newlines in user-influenced strings (paths, types,
+  rationale) are escaped so a crafted rationale cannot break the
+  table layout in the review report.
+
+### Added
+
+- `.github/dependabot.yml` with weekly Composer + GitHub Actions
+  updates, grouped for symfony and phpunit packages.
+- Two new unit tests covering symlink rejection and size-cap
+  behaviour in `LocalFilesAdapter`.
+
 ### Changed
 
 - `AiClassifier` now wires `B13\Aim\Ai`: text generation for
