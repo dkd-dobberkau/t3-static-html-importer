@@ -25,7 +25,7 @@ use T3x\StaticHtmlImporter\Domain\Model\ImportMapping;
  */
 final class YamlMappingLoader
 {
-    private const ALLOWED_FIELD_TYPES = ['string', 'html', 'int', 'date'];
+    private const ALLOWED_FIELD_TYPES = ['string', 'html', 'int', 'date', 'image'];
 
     public function loadFile(string $path): ImportMapping
     {

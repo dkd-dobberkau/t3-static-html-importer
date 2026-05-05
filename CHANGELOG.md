@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `t3:static-html:import` is now functional. Pipeline:
+  LocalFilesAdapter → StructuralAnalyzer → ContentImporter
+  buildPayload → image-field resolution under the source dir →
+  FalImporter for `image`-type fields → DataHandlerAdapter for
+  tt_content. Required `--target-pid`, configurable `--storage`
+  and `--folder`, `--dry-run` validates without DB or FAL writes,
+  `--no-ai` disables FieldTransformer's AI fallback, `--review`
+  writes a CSV (document, block_id, phase, message) of validation
+  failures. Image paths must resolve under the source root; URLs
+  and out-of-tree paths are rejected. The CSV writer reuses the
+  AnalyzeCommand path-validation hardening (absolute, no `..`,
+  parent must exist). 6 unit tests via fakes.
+- `image` field type recognised by `YamlMappingLoader` and
+  handled by `FieldTransformer` (returns `<img src>`); used by
+  `ImportCommand` to feed FalImporter.
 - `t3:static-html:templates` is now functional. Reads HTML sources,
   runs the structural analyzer, optionally calls AiClassifier on
   blocks below `--threshold` (off with `--no-ai`), and hands the

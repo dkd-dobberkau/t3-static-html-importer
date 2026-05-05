@@ -30,7 +30,7 @@ Three Symfony Console commands, run in order:
 | --- | --- | --- |
 | `t3:static-html:analyze` | functional | Read sources, emit a structure report and a first mapping suggestion. |
 | `t3:static-html:templates` | functional | Generate Fluid partials, per-cType templates and a default layout under a target Resources/Private. |
-| `t3:static-html:import` | placeholder | Persist `tt_content` records and FAL assets (wiring tracked in issue #16). |
+| `t3:static-html:import` | functional | Persist `tt_content` records and FAL assets, idempotent re-runs by block hash. |
 
 Run analyze first, review the mapping, run templates, review again, then import. The order is intentional.
 

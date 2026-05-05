@@ -82,8 +82,37 @@ final class FieldTransformer implements FieldTransformerInterface
             'html' => $this->extractHtml($crawler, $field),
             'int' => $this->extractInt($crawler, $field),
             'date' => $this->extractDate($crawler, $field),
+            'image' => $this->extractImage($crawler, $field),
             default => null,
         };
+    }
+
+    /**
+     * Returns the src of the relevant `<img>` tag. Used by `image`-type fields
+     * so the value can be routed through FalImporter downstream.
+     */
+    private function extractImage(Crawler $crawler, FieldDefinition $field): ?string
+    {
+        // Field-name-specific scoping (e.g. `.hero-image img`)
+        foreach ($this->selectorsFor($field) as $selector) {
+            $scoped = $this->safeFilter($crawler, $selector);
+            if ($scoped->count() > 0) {
+                $img = $scoped->filter('img')->first();
+                if ($img->count() > 0) {
+                    $src = $img->attr('src');
+                    if ($src !== null && $src !== '') {
+                        return $src;
+                    }
+                }
+            }
+        }
+        // Fallback: first <img> anywhere in the block
+        $first = $this->safeFilter($crawler, 'img')->first();
+        if ($first->count() > 0) {
+            $src = $first->attr('src');
+            return $src !== null && $src !== '' ? $src : null;
+        }
+        return null;
     }
 
     private function extractString(Crawler $crawler, FieldDefinition $field): ?string
