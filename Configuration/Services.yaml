@@ -13,3 +13,8 @@ services:
     resource: '../Classes/Command/*'
     public: true
     tags: ['console.command']
+
+  # Production AiClassifier wraps b13/aim. Tests inject AiClassifierMock
+  # directly, no DI alias swap needed.
+  T3x\StaticHtmlImporter\Service\Ai\AiClassifierInterface:
+    alias: T3x\StaticHtmlImporter\Service\Ai\AiClassifier
