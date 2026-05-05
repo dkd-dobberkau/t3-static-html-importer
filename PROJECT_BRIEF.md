@@ -6,10 +6,10 @@ TYPO3-Extension, die statisches HTML aus heterogenen Quellen (lokale Verzeichnis
 
 ## Composer-Identität
 
-- name: `dkd/t3-static-html-importer`
+- name: `t3x/static-html-importer`
 - type: `typo3-cms-extension`
 - license: `GPL-2.0-or-later`
-- vendor namespace: `Dkd\T3StaticHtmlImporter`
+- vendor namespace: `T3x\StaticHtmlImporter`
 - composer command namespace: `t3:static-html:*`
 
 ## Ziel-Versionen
