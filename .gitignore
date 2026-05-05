@@ -30,6 +30,9 @@ composer.lock
 # Playwright MCP
 /.playwright-mcp/
 
+# Claude Code project state
+/.claude/
+
 # Local env
 .env
 .env.local

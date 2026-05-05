@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `AiClassifier` now wires `B13\Aim\Ai`: text generation for
+  `classifyBlock` and `extractFieldValue`, vision for
+  `enrichAssetMetadata`. The `dispatch()` TODO is closed.
+
+### Added
+
+- `JsonResponseExtractor` strips markdown code fences and surrounding
+  prose from LLM responses, then enforces the schema's `required`
+  keys. 7 unit tests covering plain JSON, fenced JSON, prose-wrapped
+  JSON, missing-required, no-required-array, non-JSON content.
+- `LICENSE` (GPLv2 text), `CHANGELOG.md`, `CONTRIBUTING.md`.
+- New milestone "Templates & Import" with seven planning issues
+  covering FluidPartialGenerator, FieldTransformer, ContentImporter,
+  FalImporter, plus the two command wirings.
+
 ## [0.1.0] - 2026-05-05
 
 Skeleton phase. The pipeline reads HTML, segments into ContentBlocks,
