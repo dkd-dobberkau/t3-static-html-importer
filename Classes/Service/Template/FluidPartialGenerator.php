@@ -29,9 +29,9 @@ final class FluidPartialGenerator implements FluidPartialGeneratorInterface
 
     /**
      * @param  list<ContentBlock> $blocks
-     * @return list<string>       paths of files written, relative to $targetRoot
+     * @return list<string>       paths of files (would-be-)written, relative to $targetRoot
      */
-    public function generate(array $blocks, string $targetRoot): array
+    public function generate(array $blocks, string $targetRoot, bool $dryRun = false): array
     {
         $root = $this->validateTargetRoot($targetRoot);
 
@@ -40,7 +40,7 @@ final class FluidPartialGenerator implements FluidPartialGeneratorInterface
         $newManifest = [];
         $written = [];
 
-        $this->writeLayoutIfMissing($root, $written, $newManifest);
+        $this->writeLayoutIfMissing($root, $written, $newManifest, $dryRun);
 
         $byHash = $this->groupByHash($blocks);
         foreach ($byHash as $hash => $hashedBlocks) {
@@ -49,17 +49,19 @@ final class FluidPartialGenerator implements FluidPartialGeneratorInterface
                 substr($hash, 0, self::PARTIAL_HASH_PREFIX_LEN),
             );
             $content = $this->renderPartial($hash, $hashedBlocks);
-            $this->writeIfChanged($root, $relativePath, $content, $existingManifest, $newManifest, $written);
+            $this->writeIfChanged($root, $relativePath, $content, $existingManifest, $newManifest, $written, $dryRun);
         }
 
         $byType = $this->groupByPrimaryType($blocks);
         foreach ($byType as $cType => $hashSet) {
             $relativePath = sprintf('Templates/%s.html', $this->sanitizeCType($cType));
             $content = $this->renderTemplate($cType, array_keys($hashSet));
-            $this->writeIfChanged($root, $relativePath, $content, $existingManifest, $newManifest, $written);
+            $this->writeIfChanged($root, $relativePath, $content, $existingManifest, $newManifest, $written, $dryRun);
         }
 
-        $this->writeManifest($manifestPath, $newManifest);
+        if (!$dryRun) {
+            $this->writeManifest($manifestPath, $newManifest);
+        }
 
         return $written;
     }
@@ -105,6 +107,7 @@ final class FluidPartialGenerator implements FluidPartialGeneratorInterface
         array $existingManifest,
         array &$newManifest,
         array &$written,
+        bool $dryRun = false,
     ): void {
         $absolute = $root . '/' . $relativePath;
         $contentHash = sha1($content);
@@ -123,7 +126,9 @@ final class FluidPartialGenerator implements FluidPartialGeneratorInterface
             return;
         }
 
-        $this->writeFile($absolute, $content);
+        if (!$dryRun) {
+            $this->writeFile($absolute, $content);
+        }
         $newManifest[$relativePath] = $contentHash;
         $written[] = $relativePath;
     }
@@ -132,13 +137,15 @@ final class FluidPartialGenerator implements FluidPartialGeneratorInterface
      * @param array<string, string> $newManifest receives entry by reference
      * @param list<string>          $written     receives entry by reference
      */
-    private function writeLayoutIfMissing(string $root, array &$written, array &$newManifest): void
+    private function writeLayoutIfMissing(string $root, array &$written, array &$newManifest, bool $dryRun): void
     {
         $relative = 'Layouts/Default.html';
         $absolute = $root . '/' . $relative;
         $content = $this->renderLayout();
         if (!is_file($absolute)) {
-            $this->writeFile($absolute, $content);
+            if (!$dryRun) {
+                $this->writeFile($absolute, $content);
+            }
             $written[] = $relative;
         }
         $newManifest[$relative] = sha1($content);

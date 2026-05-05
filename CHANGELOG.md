@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `t3:static-html:templates` is now functional. Reads HTML sources,
+  runs the structural analyzer, optionally calls AiClassifier on
+  blocks below `--threshold` (off with `--no-ai`), and hands the
+  result to FluidPartialGenerator. `--target` overrides the default
+  output (extension's `Resources/Private`); `--dry-run` prints a
+  list of planned writes without touching the filesystem. Markdown
+  summary is written to stdout. 5 unit tests via CommandTester.
+- `FluidPartialGeneratorInterface::generate()` gains an optional
+  `bool $dryRun = false` parameter; in dry-run mode the manifest
+  is not written and no files are produced, but the return list
+  reflects what would have been written.
 - `FalImporter` is now functional. Hashes the source file's contents
   and short-circuits to the existing sys_file uid when SHA1 already
   matches (no copy, no re-upload). Otherwise routes through the

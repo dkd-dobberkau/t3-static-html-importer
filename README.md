@@ -26,11 +26,11 @@ vendor/bin/typo3 extension:setup static_html_importer
 
 Three Symfony Console commands, run in order:
 
-| Command | Purpose |
-| --- | --- |
-| `t3:static-html:analyze` | Read sources, emit a structure report and a first mapping suggestion. |
-| `t3:static-html:templates` | Generate Fluid partials, layouts and templates from analyzed sources. |
-| `t3:static-html:import` | Persist `tt_content` records and FAL assets. |
+| Command | Status | Purpose |
+| --- | --- | --- |
+| `t3:static-html:analyze` | functional | Read sources, emit a structure report and a first mapping suggestion. |
+| `t3:static-html:templates` | functional | Generate Fluid partials, per-cType templates and a default layout under a target Resources/Private. |
+| `t3:static-html:import` | placeholder | Persist `tt_content` records and FAL assets (wiring tracked in issue #16). |
 
 Run analyze first, review the mapping, run templates, review again, then import. The order is intentional.
 

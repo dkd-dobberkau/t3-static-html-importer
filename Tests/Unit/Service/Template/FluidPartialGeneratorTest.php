@@ -119,6 +119,19 @@ final class FluidPartialGeneratorTest extends TestCase
         self::assertContains('Templates/role_contentinfo.html', $written);
     }
 
+    public function testDryRunReturnsPlannedPathsButWritesNothing(): void
+    {
+        $a = $this->block('hashabc000000', '<p>A</p>', ['textmedia']);
+
+        $written = $this->generator->generate([$a], $this->root, dryRun: true);
+
+        self::assertNotEmpty($written);
+        self::assertContains('Layouts/Default.html', $written);
+        self::assertFileDoesNotExist($this->root . '/Layouts/Default.html');
+        self::assertFileDoesNotExist($this->root . '/Partials/Generated/hashabc00000.html');
+        self::assertFileDoesNotExist($this->root . '/Partials/Generated/.manifest.json');
+    }
+
     public function testWritesManifestFile(): void
     {
         $a = $this->block('hashabc000000', '<p>A</p>', ['textmedia']);
