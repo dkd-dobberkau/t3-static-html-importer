@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `SourceAdapterRegistry` routes commands to the right
+  `SourceAdapterInterface` based on the source string: `http(s)://`
+  -> `CrawlAdapter`, `pattern-library:<path>` -> `PatternLibraryAdapter`,
+  everything else -> `LocalFilesAdapter`. AnalyzeCommand,
+  TemplatesCommand and ImportCommand now inject the registry
+  instead of `LocalFilesAdapter` directly. Reports show which
+  adapter ran. 7 unit tests for routing.
+- `CrawlAdapter` is functional (HTTP BFS via Symfony HttpClient,
+  10 unit tests via MockHttpClient).
+- `PatternLibraryAdapter` is functional (Fractal-style component
+  walks, 8 unit tests).
+
 ### Changed
 
 - `ImportCommand` now creates proper `sys_file_reference` rows for

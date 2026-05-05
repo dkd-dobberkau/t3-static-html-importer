@@ -16,7 +16,11 @@ use T3x\StaticHtmlImporter\Service\Import\FalAdapterInterface;
 use T3x\StaticHtmlImporter\Service\Import\FalImporter;
 use T3x\StaticHtmlImporter\Service\Mapping\FieldTransformer;
 use T3x\StaticHtmlImporter\Service\Mapping\YamlMappingLoader;
+use Symfony\Component\HttpClient\MockHttpClient;
+use T3x\StaticHtmlImporter\Service\Source\CrawlAdapter;
 use T3x\StaticHtmlImporter\Service\Source\LocalFilesAdapter;
+use T3x\StaticHtmlImporter\Service\Source\PatternLibraryAdapter;
+use T3x\StaticHtmlImporter\Service\Source\SourceAdapterRegistry;
 
 final class ImportCommandTest extends TestCase
 {
@@ -53,7 +57,7 @@ final class ImportCommandTest extends TestCase
         $this->falAdapter = $this->newFalAdapter();
 
         $command = new ImportCommand(
-            new LocalFilesAdapter(),
+            $this->newRegistry(),
             new StructuralAnalyzer(new BlockHasher()),
             new YamlMappingLoader(),
             new ContentImporter(new FieldTransformer(new AiClassifierMock()), $this->dbAdapter),
@@ -188,17 +192,16 @@ final class ImportCommandTest extends TestCase
         $blockId = $blockIdCall['payload'][ContentImporter::DEDUPE_COLUMN];
         $this->dbAdapter->existingUidMap[$blockId] = 99;
 
-        $tester = new CommandTester(
-            new ImportCommand(
-                new LocalFilesAdapter(),
-                new StructuralAnalyzer(new BlockHasher()),
-                new YamlMappingLoader(),
-                new ContentImporter(new FieldTransformer(new AiClassifierMock()), $this->dbAdapter),
-                $this->dbAdapter,
-                new FalImporter($this->falAdapter, new AiClassifierMock()),
-            ),
+        $cmd = new ImportCommand(
+            $this->newRegistry(),
+            new StructuralAnalyzer(new BlockHasher()),
+            new YamlMappingLoader(),
+            new ContentImporter(new FieldTransformer(new AiClassifierMock()), $this->dbAdapter),
+            $this->dbAdapter,
+            new FalImporter($this->falAdapter, new AiClassifierMock()),
         );
-        // Re-use the same command name binding
+        $cmd->setName('t3:static-html:import');
+        $tester = new CommandTester($cmd);
         $tester->execute([
             'source' => $this->sourceDir,
             'mapping' => $this->mappingPath,
@@ -231,6 +234,15 @@ final class ImportCommandTest extends TestCase
 
         self::assertSame(2, $this->tester->getStatusCode());
         self::assertStringContainsString('--threshold must be in', $this->tester->getDisplay());
+    }
+
+    private function newRegistry(): SourceAdapterRegistry
+    {
+        return new SourceAdapterRegistry(
+            new LocalFilesAdapter(),
+            new CrawlAdapter(httpClient: new MockHttpClient([])),
+            new PatternLibraryAdapter(),
+        );
     }
 
     /**

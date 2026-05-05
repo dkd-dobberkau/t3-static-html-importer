@@ -12,7 +12,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use T3x\StaticHtmlImporter\Domain\Model\ContentBlock;
 use T3x\StaticHtmlImporter\Service\Ai\AiClassifierInterface;
 use T3x\StaticHtmlImporter\Service\Analyzer\StructuralAnalyzer;
-use T3x\StaticHtmlImporter\Service\Source\LocalFilesAdapter;
+use T3x\StaticHtmlImporter\Service\Source\SourceAdapterRegistry;
 use T3x\StaticHtmlImporter\Service\Template\FluidPartialGeneratorInterface;
 use Throwable;
 
@@ -30,7 +30,7 @@ final class TemplatesCommand extends Command
     private const DEFAULT_THRESHOLD = 0.6;
 
     public function __construct(
-        private readonly LocalFilesAdapter $files,
+        private readonly SourceAdapterRegistry $sources,
         private readonly StructuralAnalyzer $analyzer,
         private readonly AiClassifierInterface $ai,
         private readonly FluidPartialGeneratorInterface $generator,
@@ -66,8 +66,10 @@ final class TemplatesCommand extends Command
             ? $targetOption
             : $this->defaultTarget();
 
+        $route = $this->sources->resolve($source);
+
         try {
-            $blocks = $this->collectBlocks($source, $useAi, $threshold);
+            $blocks = $this->collectBlocks($route['adapter'], $route['source'], $useAi, $threshold);
         } catch (Throwable $e) {
             $output->writeln(sprintf('<error>%s</error>', $e->getMessage()));
             return Command::FAILURE;
@@ -80,17 +82,17 @@ final class TemplatesCommand extends Command
             return Command::FAILURE;
         }
 
-        $output->write($this->renderReport($source, $target, count($blocks), $written, $useAi, $threshold, $dryRun));
+        $output->write($this->renderReport($source, $route['name'], $target, count($blocks), $written, $useAi, $threshold, $dryRun));
         return Command::SUCCESS;
     }
 
     /**
      * @return list<ContentBlock>
      */
-    private function collectBlocks(string $source, bool $useAi, float $threshold): array
+    private function collectBlocks(\T3x\StaticHtmlImporter\Service\Source\SourceAdapterInterface $adapter, string $source, bool $useAi, float $threshold): array
     {
         $all = [];
-        foreach ($this->files->read($source) as $document) {
+        foreach ($adapter->read($source) as $document) {
             foreach ($this->analyzer->analyze($document) as $block) {
                 $all[] = $useAi ? $this->maybeReclassify($block, $threshold) : $block;
             }
@@ -131,6 +133,7 @@ final class TemplatesCommand extends Command
      */
     private function renderReport(
         string $source,
+        string $adapterName,
         string $target,
         int $blockCount,
         array $written,
@@ -147,6 +150,7 @@ final class TemplatesCommand extends Command
 
         $out = "# Static HTML Templates Generation Report\n\n";
         $out .= sprintf("- Source: `%s`\n", $source);
+        $out .= sprintf("- Source adapter: %s\n", $adapterName);
         $out .= sprintf("- Target: `%s`\n", $target);
         $out .= sprintf("- Blocks: %d\n", $blockCount);
         $out .= sprintf("- Mode: %s\n", $mode);

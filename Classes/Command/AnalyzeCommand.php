@@ -16,7 +16,7 @@ use T3x\StaticHtmlImporter\Service\Ai\AiClassifierInterface;
 use T3x\StaticHtmlImporter\Service\Analyzer\AnalyzedBlock;
 use T3x\StaticHtmlImporter\Service\Analyzer\StructuralAnalyzer;
 use T3x\StaticHtmlImporter\Service\Mapping\YamlMappingLoader;
-use T3x\StaticHtmlImporter\Service\Source\LocalFilesAdapter;
+use T3x\StaticHtmlImporter\Service\Source\SourceAdapterRegistry;
 use Throwable;
 
 /**
@@ -33,7 +33,7 @@ final class AnalyzeCommand extends Command
     private const DEFAULT_THRESHOLD = 0.6;
 
     public function __construct(
-        private readonly LocalFilesAdapter $files,
+        private readonly SourceAdapterRegistry $sources,
         private readonly StructuralAnalyzer $analyzer,
         private readonly AiClassifierInterface $ai,
         private readonly YamlMappingLoader $mappings,
@@ -76,8 +76,10 @@ final class AnalyzeCommand extends Command
             }
         }
 
+        $route = $this->sources->resolve($source);
+
         try {
-            $analyses = $this->analyzeAll($source, $useAi, $threshold);
+            $analyses = $this->analyzeAll($route['adapter'], $route['source'], $useAi, $threshold);
         } catch (Throwable $e) {
             $output->writeln(sprintf('<error>%s</error>', $e->getMessage()));
             return Command::FAILURE;
@@ -85,7 +87,7 @@ final class AnalyzeCommand extends Command
 
         $force = (bool)$input->getOption('force');
 
-        $report = $this->renderReport($source, $analyses, $loadedMappings, $useAi, $threshold);
+        $report = $this->renderReport($source, $route['name'], $analyses, $loadedMappings, $useAi, $threshold);
         $reportPath = $input->getOption('output');
         if (is_string($reportPath) && $reportPath !== '') {
             try {
@@ -129,10 +131,10 @@ final class AnalyzeCommand extends Command
     /**
      * @return list<array{document: SourceDocument, blocks: list<AnalyzedBlock>}>
      */
-    private function analyzeAll(string $source, bool $useAi, float $threshold): array
+    private function analyzeAll(\T3x\StaticHtmlImporter\Service\Source\SourceAdapterInterface $adapter, string $source, bool $useAi, float $threshold): array
     {
         $analyses = [];
-        foreach ($this->files->read($source) as $document) {
+        foreach ($adapter->read($source) as $document) {
             $blocks = $this->analyzer->analyze($document);
             $enriched = [];
             foreach ($blocks as $block) {
@@ -155,13 +157,14 @@ final class AnalyzeCommand extends Command
      * @param list<array{document: SourceDocument, blocks: list<AnalyzedBlock>}> $analyses
      * @param array<string, ImportMapping>                                       $mappings
      */
-    private function renderReport(string $source, array $analyses, array $mappings, bool $useAi, float $threshold): string
+    private function renderReport(string $source, string $adapterName, array $analyses, array $mappings, bool $useAi, float $threshold): string
     {
         $totalBlocks = array_sum(array_map(static fn (array $a): int => count($a['blocks']), $analyses));
         $mode = $useAi ? 'AI-assisted (mock or real, depending on DI)' : 'deterministic only';
 
         $out = "# Static HTML Analysis Report\n\n";
         $out .= sprintf("- Source: `%s`\n", $source);
+        $out .= sprintf("- Source adapter: %s\n", $adapterName);
         $out .= sprintf("- Documents: %d\n", count($analyses));
         $out .= sprintf("- Blocks: %d\n", $totalBlocks);
         $out .= sprintf("- Mode: %s\n", $mode);

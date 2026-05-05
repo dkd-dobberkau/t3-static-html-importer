@@ -10,7 +10,11 @@ use T3x\StaticHtmlImporter\Command\TemplatesCommand;
 use T3x\StaticHtmlImporter\Service\Ai\AiClassifierMock;
 use T3x\StaticHtmlImporter\Service\Analyzer\BlockHasher;
 use T3x\StaticHtmlImporter\Service\Analyzer\StructuralAnalyzer;
+use Symfony\Component\HttpClient\MockHttpClient;
+use T3x\StaticHtmlImporter\Service\Source\CrawlAdapter;
 use T3x\StaticHtmlImporter\Service\Source\LocalFilesAdapter;
+use T3x\StaticHtmlImporter\Service\Source\PatternLibraryAdapter;
+use T3x\StaticHtmlImporter\Service\Source\SourceAdapterRegistry;
 use T3x\StaticHtmlImporter\Service\Template\FluidPartialGenerator;
 
 final class TemplatesCommandTest extends TestCase
@@ -32,8 +36,13 @@ final class TemplatesCommandTest extends TestCase
             '<html><body><section data-component="hero"><h1>Welcome</h1><p>Lead</p></section></body></html>',
         );
 
-        $command = new TemplatesCommand(
+        $registry = new SourceAdapterRegistry(
             new LocalFilesAdapter(),
+            new CrawlAdapter(httpClient: new MockHttpClient([])),
+            new PatternLibraryAdapter(),
+        );
+        $command = new TemplatesCommand(
+            $registry,
             new StructuralAnalyzer(new BlockHasher()),
             new AiClassifierMock(),
             new FluidPartialGenerator(),

@@ -16,7 +16,8 @@ use T3x\StaticHtmlImporter\Service\Import\ContentImporter;
 use T3x\StaticHtmlImporter\Service\Import\DataHandlerAdapterInterface;
 use T3x\StaticHtmlImporter\Service\Import\FalImporterInterface;
 use T3x\StaticHtmlImporter\Service\Mapping\YamlMappingLoader;
-use T3x\StaticHtmlImporter\Service\Source\LocalFilesAdapter;
+use T3x\StaticHtmlImporter\Service\Source\SourceAdapterInterface;
+use T3x\StaticHtmlImporter\Service\Source\SourceAdapterRegistry;
 use Throwable;
 
 /**
@@ -41,7 +42,7 @@ final class ImportCommand extends Command
     private const DEFAULT_THRESHOLD = 0.6;
 
     public function __construct(
-        private readonly LocalFilesAdapter $files,
+        private readonly SourceAdapterRegistry $sources,
         private readonly StructuralAnalyzer $analyzer,
         private readonly YamlMappingLoader $mappings,
         private readonly ContentImporter $contentImporter,
@@ -86,8 +87,14 @@ final class ImportCommand extends Command
         }
 
         $source = (string)$input->getArgument('source');
-        $sourceReal = realpath($source);
-        if ($sourceReal === false || !is_dir($sourceReal)) {
+        $route = $this->sources->resolve($source);
+
+        // Image resolution under the source dir is only meaningful for
+        // file-system-backed adapters. Non-local sources skip image-field
+        // FAL imports for now (assets would need to be downloaded first;
+        // tracked as a follow-up).
+        $sourceReal = $route['name'] === 'local' ? realpath($route['source']) : null;
+        if ($route['name'] === 'local' && ($sourceReal === false || !is_dir($sourceReal))) {
             $output->writeln(sprintf('<error>Source is not a directory: %s</error>', $source));
             return Command::FAILURE;
         }
@@ -113,7 +120,7 @@ final class ImportCommand extends Command
         $skippedNoMapping = 0;
 
         try {
-            foreach ($this->files->read($source) as $document) {
+            foreach ($route['adapter']->read($route['source']) as $document) {
                 foreach ($this->analyzer->analyze($document) as $block) {
                     $blockCount++;
                     $mapping = $this->pickMapping($mappings, $block);
@@ -133,15 +140,25 @@ final class ImportCommand extends Command
                     }
 
                     $payload = $this->contentImporter->buildPayload($block, $mapping);
-                    [$payload, $fileReferences] = $this->resolveImageFields(
-                        $payload,
-                        $mapping,
-                        $sourceReal,
-                        $folder,
-                        $errors,
-                        $document->path,
-                        $block,
-                    );
+                    if ($sourceReal !== null) {
+                        [$payload, $fileReferences] = $this->resolveImageFields(
+                            $payload,
+                            $mapping,
+                            $sourceReal,
+                            $folder,
+                            $errors,
+                            $document->path,
+                            $block,
+                        );
+                    } else {
+                        $fileReferences = [];
+                        // Strip image fields for non-local adapters; tracked as follow-up
+                        foreach ($mapping->fields as $columnName => $field) {
+                            if ($field->type === 'image') {
+                                unset($payload[$columnName]);
+                            }
+                        }
+                    }
 
                     if ($dryRun) {
                         $imported[] = [
@@ -185,6 +202,7 @@ final class ImportCommand extends Command
 
         $output->write($this->renderReport(
             source: $source,
+            adapterName: $route['name'],
             mappings: $mappings,
             targetPid: $targetPid,
             blockCount: $blockCount,
@@ -318,6 +336,7 @@ final class ImportCommand extends Command
      */
     private function renderReport(
         string $source,
+        string $adapterName,
         array $mappings,
         int $targetPid,
         int $blockCount,
@@ -331,6 +350,7 @@ final class ImportCommand extends Command
 
         $out = "# Static HTML Import Report\n\n";
         $out .= sprintf("- Source: `%s`\n", $source);
+        $out .= sprintf("- Source adapter: %s\n", $adapterName);
         $out .= sprintf("- Mappings (%d cType(s)): %s\n", count($mappings), implode(', ', array_keys($mappings)));
         $out .= sprintf("- Target page uid: %d\n", $targetPid);
         $out .= sprintf("- Mode: %s\n", $dryRun ? 'dry-run' : 'live');
