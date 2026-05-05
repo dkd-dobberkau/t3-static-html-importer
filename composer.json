@@ -1,0 +1,44 @@
+{
+    "name": "t3x/static-html-importer",
+    "type": "typo3-cms-extension",
+    "description": "TYPO3 extension that imports static HTML into Fluid templates, tt_content records and FAL assets, with optional AI-assisted block classification via b13/aim.",
+    "license": "GPL-2.0-or-later",
+    "authors": [
+        {
+            "name": "Olivier Dobberkau",
+            "email": "olivier.dobberkau@dkd-digital.de"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "ext-dom": "*",
+        "typo3/cms-core": "^13.4 || ^14.0",
+        "b13/aim": "^0.1",
+        "symfony/console": "^7.0",
+        "symfony/dom-crawler": "^7.0",
+        "symfony/css-selector": "^7.0",
+        "symfony/yaml": "^7.0",
+        "symfony/config": "^7.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "T3x\\StaticHtmlImporter\\": "Classes/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "T3x\\StaticHtmlImporter\\Tests\\": "Tests/"
+        }
+    },
+    "extra": {
+        "typo3/cms": {
+            "extension-key": "static_html_importer"
+        }
+    },
+    "scripts": {
+        "test": "phpunit --testdox"
+    }
+}
