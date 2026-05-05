@@ -1,0 +1,32 @@
+# Example TYPO3 content type mapping for the Static HTML Importer.
+#
+# Place one .yaml per CType in this directory. The Analyze command resolves
+# detected blocks to mappings by cType name; the optional `selector` helps the
+# deterministic stage narrow down before the AI fallback kicks in.
+
+# Required: TYPO3 CType this mapping produces.
+cType: textmedia
+
+# Optional: structural hint. A CSS-style selector the analyzer can use to
+# pre-filter candidate blocks. Leave null to let the heuristics decide.
+selector: 'section[data-component="textmedia"]'
+
+# Optional: declarations for every field the importer should extract. Each
+# field is keyed by its tt_content column. The `description` is sent to the
+# LLM only as a fallback when deterministic extraction fails; keep it short
+# and unambiguous.
+#
+# Allowed types: string, html, int, date.
+fields:
+
+  header:
+    description: 'The headline of the block (h1, h2 or h3).'
+    type: string
+
+  bodytext:
+    description: 'The body paragraph(s) as HTML, preserving links and emphasis.'
+    type: html
+
+  image:
+    description: 'The first image inside the block, by absolute or relative URL.'
+    type: string

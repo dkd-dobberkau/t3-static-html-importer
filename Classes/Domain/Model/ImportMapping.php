@@ -8,13 +8,14 @@ namespace T3x\StaticHtmlImporter\Domain\Model;
  * One mapping rule loaded from a YAML file under Resources/Private/Mapping/.
  *
  * `selector` is an optional structural hint (CSS or simple tag/class match).
- * `fields` shape stays untyped at this stage; a typed FieldDefinition is
- * introduced alongside the AiClassifier in issue #5.
+ * `fields` is keyed by tt_content column name and holds FieldDefinition
+ * objects. The runtime type stays `array` for cheap construction; consumers
+ * should rely on the @param hint.
  */
 final readonly class ImportMapping
 {
     /**
-     * @param array<string, mixed> $fields field definitions keyed by tt_content column
+     * @param array<string, FieldDefinition> $fields field definitions keyed by tt_content column
      */
     public function __construct(
         public string $cType,
