@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `FluidPartialGenerator` is now functional: groups blocks by their
+  structural hash (one partial per unique structure), writes a
+  per-cType template that composes the partials, and emits a default
+  layout if none exists. A manifest under
+  `Partials/Generated/.manifest.json` records each generated file's
+  content hash so re-runs are idempotent. Hand-edits to generated
+  files trigger a regeneration on the next run; persistent
+  customisations belong outside `Generated/`. cType labels with
+  non-alphanumeric chars (e.g. `role:contentinfo`) are sanitised
+  for filename safety. 9 unit tests covering grouping, idempotency,
+  external-edit detection, layout-not-overwriting, and cType
+  sanitisation.
+
 ### Security
 
 - `AnalyzeCommand --output`/`--review`: paths must be absolute, must
