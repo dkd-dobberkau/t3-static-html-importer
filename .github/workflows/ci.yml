@@ -44,9 +44,10 @@ jobs:
           restore-keys: ${{ runner.os }}-composer-${{ matrix.php }}-
 
       - name: Install dependencies
-        # --no-scripts skips TYPO3's asset:publish, which needs a full TYPO3 site
-        # and is not relevant for unit-only CI on a standalone extension.
-        run: composer install --no-progress --no-scripts --no-interaction --prefer-dist
+        # --no-plugins disables TYPO3's asset:publish post-install hook, which
+        # needs a full TYPO3 site. The autoloader (PSR-4 from composer.json)
+        # works without the plugin, so unit tests run fine.
+        run: composer install --no-progress --no-plugins --no-scripts --no-interaction --prefer-dist
 
       - name: Lint PHP files
         run: find Classes Tests -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /dev/null
