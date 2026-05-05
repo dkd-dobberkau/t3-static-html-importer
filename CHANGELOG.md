@@ -16,6 +16,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unit-test fakes for the production wrapper. New phpunit config in
   `Build/FunctionalTests.xml`. CI now runs both unit and functional
   suites on PHP 8.2/8.3/8.4. Closes #22.
+- `FalAdapterTest` (functional) covers the FAL roundtrip end to end:
+  `addFile` -> `findUidBySha1` reuse, metadata insert/update,
+  `FalImporter` SHA1 dedupe across re-runs, and the `image`-field
+  `sys_file_reference` link via `DataHandlerAdapter`. Closes #23.
+
+### Fixed
+
+- `FalAdapter::addFile()` no longer calls
+  `ResourceFactory::getStorageObject()` (removed in TYPO3 v14); it now
+  uses `StorageRepository::getStorageObject()`. Surfaced by the
+  functional suite, would have blown up on every real v14 import.
+- `FalAdapter::addFile()` passes `removeOriginal=false` to
+  `ResourceStorage::addFile()`. Default behaviour was to MOVE the
+  source file into FAL, which silently destroyed the static HTML
+  scrape directory it had been imported from.
+- `DataHandlerAdapter` no longer relies on DataHandler's `type=file`
+  IRRE pipeline to wire `sys_file_reference` rows. The pipeline
+  filters NEW-key children through `FileExtensionFilter`, which calls
+  `ResourceFactory::getFileReferenceObject()` with the unresolved NEW
+  key, fails, and silently drops the relation. We now write
+  `sys_file_reference` directly via `ConnectionPool` after the parent
+  `tt_content` is committed, with explicit delete-then-insert for
+  idempotent re-runs and an updated parent counter. The legacy
+  `table_local` column (removed in TYPO3 v12) is also no longer
+  written.
 
 ### Changed
 

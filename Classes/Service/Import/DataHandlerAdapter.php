@@ -8,44 +8,27 @@ use RuntimeException;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\DataHandling\DataHandler;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Core\Utility\StringUtility;
 
 /**
- * Production wrapper around TYPO3's DataHandler.
+ * Production wrapper around TYPO3's DataHandler. Only usable inside a booted
+ * TYPO3 site (DataHandler relies on $GLOBALS state and a backend user context).
+ * Tests inject a recording fake; production wiring resolves to this class.
  *
- * Only usable inside a booted TYPO3 site (DataHandler relies on $GLOBALS state
- * and a backend user context). Tests inject a fake DataHandlerAdapterInterface
- * so this class is intentionally not unit-tested.
- *
- * @todo Functional test under typo3/testing-framework once the test fixtures
- *       harness is in place.
+ * tt_content rows are written via DataHandler so TCA validation, hooks and
+ * reference index updates run. sys_file_reference rows are written directly
+ * via ConnectionPool: DataHandler's `type=file` IRRE pipeline rejects NEW-key
+ * children before the remap stack can resolve them (FileExtensionFilter calls
+ * ResourceFactory::getFileReferenceObject() with the unresolved NEW key, fails
+ * with ResourceDoesNotExistException, and silently drops the relation).
  */
 final class DataHandlerAdapter implements DataHandlerAdapterInterface
 {
     public function processContent(int $pid, array $payload, ?int $existingUid, array $fileReferences = []): int
     {
-        $contentKey = $existingUid ?? 'NEW' . uniqid('shi_c', true);
+        $contentKey = $existingUid ?? StringUtility::getUniqueId('NEWshi_c');
         $contentRow = ['pid' => $pid] + $payload;
         $data = ['tt_content' => [$contentKey => $contentRow]];
-
-        foreach ($fileReferences as $fieldname => $fileUids) {
-            if (!is_array($fileUids) || $fileUids === []) {
-                continue;
-            }
-            $refKeys = [];
-            foreach ($fileUids as $fileUid) {
-                $refKey = 'NEW' . uniqid('shi_r', true);
-                $refKeys[] = $refKey;
-                $data['sys_file_reference'][$refKey] = [
-                    'pid' => $pid,
-                    'table_local' => 'sys_file',
-                    'uid_local' => (int)$fileUid,
-                    'tablenames' => 'tt_content',
-                    'uid_foreign' => $contentKey,
-                    'fieldname' => (string)$fieldname,
-                ];
-            }
-            $data['tt_content'][$contentKey][$fieldname] = implode(',', $refKeys);
-        }
 
         $dataHandler = GeneralUtility::makeInstance(DataHandler::class);
         $dataHandler->start($data, []);
@@ -56,14 +39,20 @@ final class DataHandlerAdapter implements DataHandlerAdapterInterface
         }
 
         if ($existingUid !== null) {
-            return $existingUid;
+            $contentUid = $existingUid;
+        } else {
+            $resolved = $dataHandler->substNEWwithIDs[$contentKey] ?? null;
+            if ($resolved === null) {
+                throw new RuntimeException('DataHandler did not return a uid for the new tt_content record');
+            }
+            $contentUid = (int)$resolved;
         }
 
-        $uid = $dataHandler->substNEWwithIDs[$contentKey] ?? null;
-        if ($uid === null) {
-            throw new RuntimeException('DataHandler did not return a uid for the new tt_content record');
+        if ($fileReferences !== []) {
+            $this->writeFileReferences($pid, $contentUid, $fileReferences);
         }
-        return (int)$uid;
+
+        return $contentUid;
     }
 
     public function findByBlockId(string $blockId): ?int
@@ -85,5 +74,45 @@ final class DataHandlerAdapter implements DataHandlerAdapterInterface
             ->fetchOne();
 
         return $uid === false || $uid === null ? null : (int)$uid;
+    }
+
+    /**
+     * @param array<string, list<int>> $fileReferences
+     */
+    private function writeFileReferences(int $pid, int $contentUid, array $fileReferences): void
+    {
+        $connectionPool = GeneralUtility::makeInstance(ConnectionPool::class);
+        $referenceConn = $connectionPool->getConnectionForTable('sys_file_reference');
+        $contentConn = $connectionPool->getConnectionForTable('tt_content');
+
+        foreach ($fileReferences as $fieldname => $fileUids) {
+            if (!is_array($fileUids) || $fileUids === []) {
+                continue;
+            }
+            // Idempotent re-runs: drop the previous references for this field
+            // before re-creating them so the count below matches reality.
+            $referenceConn->delete('sys_file_reference', [
+                'tablenames' => 'tt_content',
+                'uid_foreign' => $contentUid,
+                'fieldname' => (string)$fieldname,
+            ]);
+            $sorting = 0;
+            foreach ($fileUids as $fileUid) {
+                $sorting++;
+                $referenceConn->insert('sys_file_reference', [
+                    'pid' => $pid,
+                    'uid_local' => (int)$fileUid,
+                    'tablenames' => 'tt_content',
+                    'uid_foreign' => $contentUid,
+                    'fieldname' => (string)$fieldname,
+                    'sorting_foreign' => $sorting,
+                ]);
+            }
+            $contentConn->update(
+                'tt_content',
+                [(string)$fieldname => count($fileUids)],
+                ['uid' => $contentUid],
+            );
+        }
     }
 }

@@ -6,8 +6,9 @@ namespace T3x\StaticHtmlImporter\Service\Import;
 
 use RuntimeException;
 use TYPO3\CMS\Core\Database\ConnectionPool;
+use TYPO3\CMS\Core\Resource\Enum\DuplicationBehavior;
 use TYPO3\CMS\Core\Resource\Exception\FolderDoesNotExistException;
-use TYPO3\CMS\Core\Resource\ResourceFactory;
+use TYPO3\CMS\Core\Resource\StorageRepository;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 /**
@@ -41,8 +42,8 @@ final class FalAdapter implements FalAdapterInterface
 
     public function addFile(string $sourcePath, int $storageUid, string $folderPath): int
     {
-        $factory = GeneralUtility::makeInstance(ResourceFactory::class);
-        $storage = $factory->getStorageObject($storageUid);
+        $storage = GeneralUtility::makeInstance(StorageRepository::class)
+            ->getStorageObject($storageUid);
 
         $folderPath = $folderPath === '' ? '/' : $folderPath;
         try {
@@ -51,7 +52,9 @@ final class FalAdapter implements FalAdapterInterface
             $folder = $storage->createFolder($folderPath);
         }
 
-        $file = $storage->addFile($sourcePath, $folder);
+        // removeOriginal: false — the source typically lives in a static HTML
+        // scrape directory the importer must not mutate.
+        $file = $storage->addFile($sourcePath, $folder, '', DuplicationBehavior::RENAME, false);
         return $file->getUid();
     }
 
