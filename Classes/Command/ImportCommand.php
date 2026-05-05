@@ -23,11 +23,13 @@ use Throwable;
  * Persists analysed blocks as tt_content records and imports referenced
  * binary assets into FAL.
  *
- * Pipeline per block: build the tt_content payload via ContentImporter ->
- * resolve image-type fields against the source directory and route them
- * through FalImporter -> persist via DataHandlerAdapter. Non-fatal errors
- * (unreadable images, AI hiccups, schema-misshapen rows) collect into a CSV
- * review report; the import continues so partial progress is never lost.
+ * Pipeline per block: pick the matching mapping by `block->candidateTypes`
+ * priority (the first entry that has a YAML mapping wins) -> build the
+ * tt_content payload via ContentImporter -> route image-type fields through
+ * FalImporter and collect their uids as `sys_file_reference` rows -> persist
+ * via DataHandlerAdapter in a single transaction so FAL relations are
+ * properly created. Non-fatal errors collect into a CSV review report; the
+ * import continues so partial progress is never lost.
  *
  * `--dry-run` builds and validates the full payload but skips both DB and
  * FAL writes.
@@ -54,7 +56,7 @@ final class ImportCommand extends Command
         $this
             ->setDescription('Persist analyzed blocks as tt_content records and FAL assets.')
             ->addArgument('source', InputArgument::REQUIRED, 'Path to a directory of static HTML files')
-            ->addArgument('mapping', InputArgument::REQUIRED, 'Path to a mapping YAML file or directory')
+            ->addArgument('mapping', InputArgument::REQUIRED, 'Path to a mapping YAML file or directory of mappings')
             ->addOption('target-pid', null, InputOption::VALUE_REQUIRED, 'Target page uid for tt_content records (required)')
             ->addOption('storage', null, InputOption::VALUE_REQUIRED, 'FAL storage uid', (string)self::DEFAULT_STORAGE)
             ->addOption('folder', null, InputOption::VALUE_REQUIRED, 'FAL target folder', self::DEFAULT_FOLDER)
@@ -92,9 +94,13 @@ final class ImportCommand extends Command
 
         $mappingArg = (string)$input->getArgument('mapping');
         try {
-            $mapping = $this->loadSingleMapping($mappingArg);
+            $mappings = $this->loadMappings($mappingArg);
         } catch (Throwable $e) {
             $output->writeln(sprintf('<error>Mapping load failed: %s</error>', $e->getMessage()));
+            return Command::FAILURE;
+        }
+        if ($mappings === []) {
+            $output->writeln('<error>No mappings loaded from the given path</error>');
             return Command::FAILURE;
         }
 
@@ -104,25 +110,71 @@ final class ImportCommand extends Command
         $imported = [];
         $errors = [];
         $blockCount = 0;
+        $skippedNoMapping = 0;
 
         try {
             foreach ($this->files->read($source) as $document) {
                 foreach ($this->analyzer->analyze($document) as $block) {
                     $blockCount++;
+                    $mapping = $this->pickMapping($mappings, $block);
+                    if ($mapping === null) {
+                        $skippedNoMapping++;
+                        $errors[] = [
+                            'document' => $document->path,
+                            'block_id' => $block->id,
+                            'phase' => 'mapping-lookup',
+                            'message' => sprintf(
+                                'No mapping matched candidates [%s]; available cTypes: [%s]',
+                                implode(', ', $block->candidateTypes) ?: '(none)',
+                                implode(', ', array_keys($mappings)),
+                            ),
+                        ];
+                        continue;
+                    }
+
                     $payload = $this->contentImporter->buildPayload($block, $mapping);
-                    $payload = $this->resolveImageFields($payload, $mapping, $sourceReal, $folder, $errors, $document->path, $block);
+                    [$payload, $fileReferences] = $this->resolveImageFields(
+                        $payload,
+                        $mapping,
+                        $sourceReal,
+                        $folder,
+                        $errors,
+                        $document->path,
+                        $block,
+                    );
 
                     if ($dryRun) {
-                        $imported[] = ['document' => $document->path, 'block' => $block, 'uid' => 0, 'updated' => false, 'payload' => $payload];
+                        $imported[] = [
+                            'document' => $document->path,
+                            'block' => $block,
+                            'mapping' => $mapping,
+                            'uid' => 0,
+                            'updated' => false,
+                            'payload' => $payload,
+                            'fileReferences' => $fileReferences,
+                        ];
                         continue;
                     }
 
                     try {
                         $existingUid = $this->dbAdapter->findByBlockId($block->id);
-                        $uid = $this->dbAdapter->processContent($targetPid, $payload, $existingUid);
-                        $imported[] = ['document' => $document->path, 'block' => $block, 'uid' => $uid, 'updated' => $existingUid !== null, 'payload' => $payload];
+                        $uid = $this->dbAdapter->processContent($targetPid, $payload, $existingUid, $fileReferences);
+                        $imported[] = [
+                            'document' => $document->path,
+                            'block' => $block,
+                            'mapping' => $mapping,
+                            'uid' => $uid,
+                            'updated' => $existingUid !== null,
+                            'payload' => $payload,
+                            'fileReferences' => $fileReferences,
+                        ];
                     } catch (Throwable $e) {
-                        $errors[] = ['document' => $document->path, 'block_id' => $block->id, 'phase' => 'datahandler', 'message' => $e->getMessage()];
+                        $errors[] = [
+                            'document' => $document->path,
+                            'block_id' => $block->id,
+                            'phase' => 'datahandler',
+                            'message' => $e->getMessage(),
+                        ];
                     }
                 }
             }
@@ -131,7 +183,16 @@ final class ImportCommand extends Command
             return Command::FAILURE;
         }
 
-        $output->write($this->renderReport($source, $mapping, $targetPid, $blockCount, $imported, $errors, $dryRun));
+        $output->write($this->renderReport(
+            source: $source,
+            mappings: $mappings,
+            targetPid: $targetPid,
+            blockCount: $blockCount,
+            skippedNoMapping: $skippedNoMapping,
+            imported: $imported,
+            errors: $errors,
+            dryRun: $dryRun,
+        ));
 
         $reviewPath = $input->getOption('review');
         if (is_string($reviewPath) && $reviewPath !== '') {
@@ -147,29 +208,38 @@ final class ImportCommand extends Command
         return Command::SUCCESS;
     }
 
-    private function loadSingleMapping(string $path): ImportMapping
+    /**
+     * @return array<string, ImportMapping> keyed by cType
+     */
+    private function loadMappings(string $path): array
     {
         if (is_dir($path)) {
-            $loaded = $this->mappings->loadDirectory($path);
-            if ($loaded === []) {
-                throw new \RuntimeException(sprintf('Mapping directory %s contains no mapping files', $path));
-            }
-            if (count($loaded) > 1) {
-                throw new \RuntimeException(sprintf(
-                    'Mapping directory %s contains multiple cTypes (%s); pass a single file for now',
-                    $path,
-                    implode(', ', array_keys($loaded)),
-                ));
-            }
-            return array_values($loaded)[0];
+            return $this->mappings->loadDirectory($path);
         }
-        return $this->mappings->loadFile($path);
+        $single = $this->mappings->loadFile($path);
+        return [$single->cType => $single];
     }
 
     /**
-     * @param  array<string, mixed>           $payload
+     * Picks the most-preferred mapping for a block: first cType in
+     * `block->candidateTypes` that has a corresponding YAML mapping wins.
+     *
+     * @param array<string, ImportMapping> $mappings
+     */
+    private function pickMapping(array $mappings, ContentBlock $block): ?ImportMapping
+    {
+        foreach ($block->candidateTypes as $candidate) {
+            if (isset($mappings[$candidate])) {
+                return $mappings[$candidate];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
      * @param  list<array{document: string, block_id: string, phase: string, message: string}> $errors  by reference
-     * @return array<string, mixed>
+     * @return array{0: array<string, mixed>, 1: array<string, list<int>>}  rewritten payload and file references
      */
     private function resolveImageFields(
         array $payload,
@@ -180,6 +250,8 @@ final class ImportCommand extends Command
         string $documentPath,
         ContentBlock $block,
     ): array {
+        $references = [];
+
         foreach ($mapping->fields as $columnName => $field) {
             if ($field->type !== 'image') {
                 continue;
@@ -200,7 +272,6 @@ final class ImportCommand extends Command
             }
             try {
                 $fileUid = $this->falImporter->importFile($resolved, $folder);
-                $payload[$columnName] = (string)$fileUid;
             } catch (Throwable $e) {
                 $errors[] = [
                     'document' => $documentPath,
@@ -209,9 +280,13 @@ final class ImportCommand extends Command
                     'message' => $e->getMessage(),
                 ];
                 unset($payload[$columnName]);
+                continue;
             }
+            $references[(string)$columnName] ??= [];
+            $references[(string)$columnName][] = $fileUid;
+            unset($payload[$columnName]);
         }
-        return $payload;
+        return [$payload, $references];
     }
 
     private function resolveImagePath(string $sourceDir, string $imagePath): ?string
@@ -237,14 +312,16 @@ final class ImportCommand extends Command
     }
 
     /**
-     * @param list<array{document: string, block: ContentBlock, uid: int, updated: bool, payload: array<string, mixed>}> $imported
-     * @param list<array{document: string, block_id: string, phase: string, message: string}>                            $errors
+     * @param array<string, ImportMapping> $mappings
+     * @param list<array{document: string, block: ContentBlock, mapping: ImportMapping, uid: int, updated: bool, payload: array<string, mixed>, fileReferences: array<string, list<int>>}> $imported
+     * @param list<array{document: string, block_id: string, phase: string, message: string}> $errors
      */
     private function renderReport(
         string $source,
-        ImportMapping $mapping,
+        array $mappings,
         int $targetPid,
         int $blockCount,
+        int $skippedNoMapping,
         array $imported,
         array $errors,
         bool $dryRun,
@@ -254,10 +331,10 @@ final class ImportCommand extends Command
 
         $out = "# Static HTML Import Report\n\n";
         $out .= sprintf("- Source: `%s`\n", $source);
-        $out .= sprintf("- Mapping: cType `%s`\n", $mapping->cType);
+        $out .= sprintf("- Mappings (%d cType(s)): %s\n", count($mappings), implode(', ', array_keys($mappings)));
         $out .= sprintf("- Target page uid: %d\n", $targetPid);
         $out .= sprintf("- Mode: %s\n", $dryRun ? 'dry-run' : 'live');
-        $out .= sprintf("- Blocks processed: %d\n", $blockCount);
+        $out .= sprintf("- Blocks processed: %d (skipped without mapping: %d)\n", $blockCount, $skippedNoMapping);
         if ($dryRun) {
             $out .= sprintf("- Would create: %d, would update: %d\n", count($created), count($updated));
         } else {
@@ -268,14 +345,17 @@ final class ImportCommand extends Command
         if ($imported !== []) {
             $verb = $dryRun ? 'Planned writes' : 'Persisted records';
             $out .= sprintf("## %s\n\n", $verb);
-            $out .= "| Document | Block | uid | Action |\n|---|---|---|---|\n";
+            $out .= "| Document | Block | cType | uid | Refs | Action |\n|---|---|---|---|---|---|\n";
             foreach ($imported as $row) {
                 $action = $dryRun ? 'preview' : ($row['updated'] ? 'update' : 'create');
+                $refsCount = array_sum(array_map('count', $row['fileReferences']));
                 $out .= sprintf(
-                    "| %s | `%s` | %s | %s |\n",
+                    "| %s | `%s` | %s | %s | %d | %s |\n",
                     $row['document'],
                     substr($row['block']->id, 0, 12),
+                    $row['mapping']->cType,
                     $dryRun ? '-' : (string)$row['uid'],
+                    $refsCount,
                     $action,
                 );
             }

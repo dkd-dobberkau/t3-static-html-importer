@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `ImportCommand` now creates proper `sys_file_reference` rows for
+  `image`-type fields instead of writing the raw FAL uid into the
+  tt_content column. The DataHandler transaction now contains the
+  tt_content row plus a `sys_file_reference` per imported file
+  (with NEW keys), so the resulting record renders correctly in the
+  TYPO3 backend with proper FAL relations. Closes the gap between
+  "skeleton happy path" and "produces clickable images in the
+  backend".
+- `ImportCommand` now supports multi-cType mapping directories: it
+  loads every YAML in a given directory, then per block picks the
+  first mapping whose key matches an entry in
+  `block->candidateTypes`. Blocks without a matching mapping are
+  reported in the review CSV (`phase: mapping-lookup`) and counted
+  in the summary, so partial coverage is visible at a glance. Same
+  command also still accepts a single mapping file.
+- `DataHandlerAdapterInterface::processContent()` gains a
+  `array $fileReferences = []` parameter (defaults to empty so
+  existing callers don't break). The production
+  `DataHandlerAdapter` builds the multi-table DataHandler payload.
+
 ### Added
 
 - `t3:static-html:import` is now functional. Pipeline:

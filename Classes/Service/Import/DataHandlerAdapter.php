@@ -17,15 +17,35 @@ use TYPO3\CMS\Core\Utility\GeneralUtility;
  * so this class is intentionally not unit-tested.
  *
  * @todo Functional test under typo3/testing-framework once the test fixtures
- *       harness is in place (ImportCommand wiring in #16 is the natural point).
+ *       harness is in place.
  */
 final class DataHandlerAdapter implements DataHandlerAdapterInterface
 {
-    public function processContent(int $pid, array $payload, ?int $existingUid): int
+    public function processContent(int $pid, array $payload, ?int $existingUid, array $fileReferences = []): int
     {
-        $key = $existingUid ?? 'NEW' . uniqid('shi', true);
-        $row = ['pid' => $pid] + $payload;
-        $data = ['tt_content' => [$key => $row]];
+        $contentKey = $existingUid ?? 'NEW' . uniqid('shi_c', true);
+        $contentRow = ['pid' => $pid] + $payload;
+        $data = ['tt_content' => [$contentKey => $contentRow]];
+
+        foreach ($fileReferences as $fieldname => $fileUids) {
+            if (!is_array($fileUids) || $fileUids === []) {
+                continue;
+            }
+            $refKeys = [];
+            foreach ($fileUids as $fileUid) {
+                $refKey = 'NEW' . uniqid('shi_r', true);
+                $refKeys[] = $refKey;
+                $data['sys_file_reference'][$refKey] = [
+                    'pid' => $pid,
+                    'table_local' => 'sys_file',
+                    'uid_local' => (int)$fileUid,
+                    'tablenames' => 'tt_content',
+                    'uid_foreign' => $contentKey,
+                    'fieldname' => (string)$fieldname,
+                ];
+            }
+            $data['tt_content'][$contentKey][$fieldname] = implode(',', $refKeys);
+        }
 
         $dataHandler = GeneralUtility::makeInstance(DataHandler::class);
         $dataHandler->start($data, []);
@@ -39,7 +59,7 @@ final class DataHandlerAdapter implements DataHandlerAdapterInterface
             return $existingUid;
         }
 
-        $uid = $dataHandler->substNEWwithIDs[$key] ?? null;
+        $uid = $dataHandler->substNEWwithIDs[$contentKey] ?? null;
         if ($uid === null) {
             throw new RuntimeException('DataHandler did not return a uid for the new tt_content record');
         }

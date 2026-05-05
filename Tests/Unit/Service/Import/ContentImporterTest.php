@@ -133,9 +133,14 @@ final class ContentImporterTest extends TestCase
 
             private int $nextUid = 1;
 
-            public function processContent(int $pid, array $payload, ?int $existingUid): int
+            public function processContent(int $pid, array $payload, ?int $existingUid, array $fileReferences = []): int
             {
-                $this->calls[] = ['pid' => $pid, 'payload' => $payload, 'existingUid' => $existingUid];
+                $this->calls[] = [
+                    'pid' => $pid,
+                    'payload' => $payload,
+                    'existingUid' => $existingUid,
+                    'fileReferences' => $fileReferences,
+                ];
                 return $existingUid ?? $this->nextUid++;
             }
 

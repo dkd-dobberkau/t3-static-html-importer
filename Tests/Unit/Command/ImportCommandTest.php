@@ -82,14 +82,53 @@ final class ImportCommandTest extends TestCase
 
         self::assertCount(1, $this->dbAdapter->calls);
         self::assertSame(5, $this->dbAdapter->calls[0]['pid']);
-        $payload = $this->dbAdapter->calls[0]['payload'];
-        self::assertSame('textmedia', $payload['CType']);
-        self::assertSame('Welcome', $payload['header']);
-        self::assertSame('1', $payload['image'] ?? null, 'image field rewritten to FAL uid');
+        $call = $this->dbAdapter->calls[0];
+        self::assertSame('textmedia', $call['payload']['CType']);
+        self::assertSame('Welcome', $call['payload']['header']);
+        self::assertArrayNotHasKey('image', $call['payload'], 'image field must move to fileReferences, not payload');
+        self::assertSame(['image' => [1]], $call['fileReferences'], 'FAL uid recorded as a sys_file_reference for the image column');
 
         self::assertCount(1, $this->falAdapter->addedFiles);
         self::assertSame(1, $this->falAdapter->addedFiles[0]['storageUid']);
         self::assertSame('/static-html-import/', $this->falAdapter->addedFiles[0]['folderPath']);
+    }
+
+    public function testRoutesBlockToMatchingMappingByCandidateType(): void
+    {
+        // Source already has data-component="hero" block -> candidateTypes starts with "hero"
+        $mappingDir = $this->sourceDir . '/mappings';
+        mkdir($mappingDir, 0o755, true);
+        file_put_contents($mappingDir . '/hero.yaml', "cType: hero\nfields:\n  header:\n    description: 'h'\n    type: string\n");
+        file_put_contents($mappingDir . '/textmedia.yaml', "cType: textmedia\nfields:\n  header:\n    description: 'h'\n    type: string\n");
+
+        $this->tester->execute([
+            'source' => $this->sourceDir,
+            'mapping' => $mappingDir,
+            '--target-pid' => '5',
+        ]);
+
+        self::assertSame(0, $this->tester->getStatusCode(), $this->tester->getDisplay());
+        self::assertCount(1, $this->dbAdapter->calls);
+        self::assertSame('hero', $this->dbAdapter->calls[0]['payload']['CType'], 'hero must win because it appears earlier in candidateTypes');
+    }
+
+    public function testSkipsBlocksWithoutMatchingMappingAndReportsThem(): void
+    {
+        $mappingDir = $this->sourceDir . '/mappings-foo';
+        mkdir($mappingDir, 0o755, true);
+        // Only an unrelated cType — neither 'hero' nor 'textmedia' is in candidateTypes
+        file_put_contents($mappingDir . '/unrelated.yaml', "cType: bullets\nfields:\n  header:\n    description: 'h'\n    type: string\n");
+
+        $this->tester->execute([
+            'source' => $this->sourceDir,
+            'mapping' => $mappingDir,
+            '--target-pid' => '5',
+        ]);
+
+        $display = $this->tester->getDisplay();
+        self::assertSame([], $this->dbAdapter->calls, 'unmapped blocks must not be persisted');
+        self::assertStringContainsString('skipped without mapping: 1', $display);
+        self::assertStringContainsString('mapping-lookup', $display);
     }
 
     public function testRejectsImagePathOutsideSourceDir(): void
@@ -206,9 +245,14 @@ final class ImportCommandTest extends TestCase
             public array $existingUidMap = [];
             private int $nextUid = 1;
 
-            public function processContent(int $pid, array $payload, ?int $existingUid): int
+            public function processContent(int $pid, array $payload, ?int $existingUid, array $fileReferences = []): int
             {
-                $this->calls[] = ['pid' => $pid, 'payload' => $payload, 'existingUid' => $existingUid];
+                $this->calls[] = [
+                    'pid' => $pid,
+                    'payload' => $payload,
+                    'existingUid' => $existingUid,
+                    'fileReferences' => $fileReferences,
+                ];
                 return $existingUid ?? $this->nextUid++;
             }
             public function findByBlockId(string $blockId): ?int
