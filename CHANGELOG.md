@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-05
+
 ### Added
 
 - `SourceAdapterRegistry` routes commands to the right
@@ -210,5 +212,6 @@ Templates and import are stubs. AiClassifier dispatch to b13/aim is a TODO.
 - GitHub Actions CI on PHP 8.2, 8.3, 8.4 (composer validate, install,
   lint, phpunit, audit).
 
-[Unreleased]: https://github.com/dkd-dobberkau/t3-static-html-importer/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dkd-dobberkau/t3-static-html-importer/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dkd-dobberkau/t3-static-html-importer/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dkd-dobberkau/t3-static-html-importer/releases/tag/v0.1.0
