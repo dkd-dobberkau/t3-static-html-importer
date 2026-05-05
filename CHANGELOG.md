@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `FieldTransformer` is now functional: type-aware coercion for
+  `string`, `html`, `int`, `date`. Field selectors are guessed from
+  `FieldDefinition::$name` (h1-h3 for "header", `<p>` for "bodytext",
+  `<img>` for "image", `<a>` for "link", etc.) plus generic
+  `.{name}` and `[data-field="{name}"]` fallbacks. `<time datetime>`
+  attributes are preferred for date fields. AI fallback via
+  `AiClassifierInterface::extractFieldValue` kicks in only when the
+  deterministic path returns null; AI failures degrade to null,
+  never bubble. 14 unit tests cover each type, the AI fallback, and
+  the empty-block / always-failing-AI edges. RteHtmlParser
+  integration for `html` type is deferred to TYPO3 wiring.
 - `FluidPartialGenerator` is now functional: groups blocks by their
   structural hash (one partial per unique structure), writes a
   per-cType template that composes the partials, and emits a default
