@@ -18,3 +18,18 @@ services:
   # directly, no DI alias swap needed.
   T3x\StaticHtmlImporter\Service\Ai\AiClassifierInterface:
     alias: T3x\StaticHtmlImporter\Service\Ai\AiClassifier
+
+  T3x\StaticHtmlImporter\Service\Mapping\FieldTransformerInterface:
+    alias: T3x\StaticHtmlImporter\Service\Mapping\FieldTransformer
+
+  T3x\StaticHtmlImporter\Service\Import\ContentImporterInterface:
+    alias: T3x\StaticHtmlImporter\Service\Import\ContentImporter
+
+  T3x\StaticHtmlImporter\Service\Import\DataHandlerAdapterInterface:
+    alias: T3x\StaticHtmlImporter\Service\Import\DataHandlerAdapter
+
+  T3x\StaticHtmlImporter\Service\Template\FluidPartialGeneratorInterface:
+    alias: T3x\StaticHtmlImporter\Service\Template\FluidPartialGenerator
+
+  T3x\StaticHtmlImporter\Service\Import\FalImporterInterface:
+    alias: T3x\StaticHtmlImporter\Service\Import\FalImporter

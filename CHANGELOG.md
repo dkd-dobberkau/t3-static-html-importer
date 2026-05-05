@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ContentImporter` is now functional. Builds a tt_content payload
+  by routing each `FieldDefinition` through `FieldTransformer`,
+  then writes via `DataHandlerAdapter` (a thin abstraction over
+  TYPO3's `DataHandler`). Idempotency: column
+  `tx_static_html_importer_block_id` carries the BlockHasher hash;
+  re-runs update the existing record by uid instead of inserting
+  duplicates. `buildPayload()` is public so a future ImportCommand
+  dry-run path can preview without DB writes. 6 unit tests via a
+  recording fake adapter.
+- `Configuration/TCA/Overrides/tt_content.php` registers the
+  dedupe column (read-only in the backend).
+- `ext_tables.sql` declares the column (varchar(40), indexed).
+- `Configuration/Services.yaml` aliases all interfaces to their
+  production implementations: FieldTransformer, ContentImporter,
+  DataHandlerAdapter, FluidPartialGenerator, FalImporter.
 - `FieldTransformer` is now functional: type-aware coercion for
   `string`, `html`, `int`, `date`. Field selectors are guessed from
   `FieldDefinition::$name` (h1-h3 for "header", `<p>` for "bodytext",
