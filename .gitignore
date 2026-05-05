@@ -1,0 +1,35 @@
+# Composer
+/vendor/
+composer.lock
+
+# TYPO3
+/.Build/
+/var/
+/public/
+/typo3temp/
+/typo3conf/
+
+# IDE
+/.idea/
+/.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Tests
+/.phpunit.cache/
+/.phpunit.result.cache
+/coverage/
+/.php-cs-fixer.cache
+/.phpstan.cache
+
+# Cache
+/var/cache/
+*.log
+
+# Playwright MCP
+/.playwright-mcp/
+
+# Local env
+.env
+.env.local
